@@ -1,0 +1,35 @@
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow
+    ports:
+      - "5000:5000"
+    # Sin volúmenes: todo se guarda en la capa del contenedor
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root /tmp/mlruns
+      --host 0.0.0.0
+      --port 5000
+      --serve-artifacts
+      --allowed-hosts "*"
+
+    restart: unless-stopped
+
+  jupyter:
+    image: jupyter/datascience-notebook:latest
+    container_name: jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+    environment:
+      JUPYTER_TOKEN: "mlflow"
+    depends_on:
+      - mlflow
+    restart: unless-stopped
+
+networks:
+  default:
+    name: mlflow-network
+

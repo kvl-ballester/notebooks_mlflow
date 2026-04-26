@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: mlflow-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGPORT: ${PGPORT}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - ${PGPORT}:${PGPORT}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} -p ${PGPORT}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow
+    user: root
+    ports:
+      - "5000:5000"   # puerto host:contenedor
+    volumes:
+      - ${MLFLOW_LOCAL_DATA}:${MLFLOW_INTERNAL_PATH}
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${PGPORT}/${POSTGRES_DB}      
+      --default-artifact-root ${MLFLOW_INTERNAL_PATH}/artifacts
+      --host 0.0.0.0
+      --port 5000
+      --serve-artifacts
+      --allowed-hosts "*"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+  jupyter:
+    image: jupyter/datascience-notebook:latest
+    container_name: jupyter
+    user: root
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ${MLFLOW_LOCAL_DATA}:${MLFLOW_INTERNAL_PATH}
+
+    entrypoint: >
+      sh -c "mkdir -p ${MLFLOW_INTERNAL_PATH} && chmod 777 ${MLFLOW_INTERNAL_PATH} && start-notebook.sh"
+    environment:
+      JUPYTER_TOKEN: "mlflow"
+      MLFLOW_PATH: ${MLFLOW_INTERNAL_PATH}
+    depends_on:
+      - mlflow
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  default:
+    name: mlflow-network

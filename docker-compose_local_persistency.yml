@@ -1,0 +1,45 @@
+#   --default-artifact-root ${MLFLOW_INTERNAL_PATH}/artifacts 
+# Esto hace que los modelos se guarden en esa direccion, como el codigo se corre en el contenedor jupyter
+# este contenedor tmb debe tener esta ruta ya es quien de verdad guarda los artefactos, mlflow solo guarda las rutas a 
+# eestos archivos.
+
+# Por lo que ambos contenedores deben tener le mismo volumen porq mlflow le va a decir a jupyter que busque en su propio contenedor
+#los archivos correespondientes.
+
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow
+    user: root
+    ports:
+      - "${MLFLOW_PORT}:${MLFLOW_PORT}"
+    volumes:
+      - ${MLFLOW_LOCAL_DATA}:${MLFLOW_INTERNAL_PATH}
+    command: >
+      mlflow server 
+      --backend-store-uri sqlite:///${MLFLOW_INTERNAL_PATH}/mlflow.db 
+      --default-artifact-root ${MLFLOW_INTERNAL_PATH}/artifacts
+      --host 0.0.0.0 
+      --port ${MLFLOW_PORT} 
+      --serve-artifacts 
+      --allowed-hosts '*'
+    restart: unless-stopped
+
+  jupyter:
+    image: jupyter/datascience-notebook:latest
+    container_name: jupyter
+    user: root
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ${MLFLOW_LOCAL_DATA}:${MLFLOW_INTERNAL_PATH}
+
+    entrypoint: >
+      sh -c "mkdir -p ${MLFLOW_INTERNAL_PATH} && chmod 777 ${MLFLOW_INTERNAL_PATH} && start-notebook.sh"
+    environment:
+      JUPYTER_TOKEN: "mlflow"
+      MLFLOW_PATH: ${MLFLOW_INTERNAL_PATH}
+    depends_on:
+      - mlflow
+    restart: unless-stopped
